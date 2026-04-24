@@ -50,9 +50,13 @@
 #include "displays/pins.h"
 #include "splash.h"
 
+// 添加MAX17048电池电量计支持
+#ifdef ENABLE_MAX17048_BATTERY
+#include "MAX17048.h"
+extern MAX17048 batteryGauge;
+#endif
 
 #include "driver/rtc_io.h"
-#include "esp_pm.h"
 
 #include "FS.h"
 #include "FFat.h"
@@ -98,14 +102,6 @@ SensorPCF85063 rtc;
 TouchDrvFT6X36 tp;
 #endif
 
-#ifdef ENABLE_MAX17048_BATTERY
-#include "drivers/MAX17048.h"
-MAX17048 batteryGauge;
-#elif defined ENABLE_CW2015_BATTERY
-#include "drivers/cw2015.h"
-CW2015 batteryGauge;
-#endif
-
 #define FLASH FFat
 #define F_NAME "FATFS"
 
@@ -116,6 +112,10 @@ Button2 btn_home;
 
 ChronosESP32 watch("Chronos C3");
 Preferences prefs;
+
+#ifdef ENABLE_MAX17048_BATTERY
+MAX17048 batteryGauge;
+#endif
 
 #ifdef ENABLE_APP_QMI8658C
 QMI8658 qmi8658c;
@@ -136,7 +136,6 @@ ChronosTimer screenTimer;
 ChronosTimer alertTimer;
 ChronosTimer searchTimer;
 
-String chip;  // Global chip model string
 Navigation nav;
 bool navChanged = false;
 bool navIcChanged = false;
@@ -1375,15 +1374,6 @@ void onCustomFaceSelected(int pathIndex)
     ui_home = face_custom_root;
   }
 
-  // Get battery level when entering home screen with custom face
-#ifdef ENABLE_MAX17048_BATTERY
-  float soc = batteryGauge.getSoC();
-  watch.setBattery((int)soc);
-#elif defined ENABLE_CW2015_BATTERY
-  float capacity = batteryGauge.capacity();
-  watch.setBattery((int)capacity);
-#endif
-  
   lv_screen_load_anim(ui_home, LV_SCR_LOAD_ANIM_FADE_ON, 500, 0, false);
 
   prefs.putString("custom", customFacePaths[pathIndex]);
@@ -1771,15 +1761,6 @@ void btn_home_handler(Button2 &btn)
     if (actScr != ui_home)
     {
       lv_screen_load_anim(ui_home, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, false);
-      
-      // Get battery level when entering home screen
-#ifdef ENABLE_MAX17048_BATTERY
-      float soc = batteryGauge.getSoC();
-      watch.setBattery((int)soc);
-#elif defined ENABLE_CW2015_BATTERY
-      float capacity = batteryGauge.capacity();
-      watch.setBattery((int)capacity);
-#endif
     }
     if (screenTimer.active && screenTimer.duration > 1 && actScr == ui_home)
     {
@@ -2038,7 +2019,7 @@ void hal_setup()
 #elif defined(VIEWE_SMARTRING) || defined(VIEWE_KNOB_15) ||  defined(ESPS3_1_75)
   watch.setScreen(CS_466x466_143_CTF);
 #endif
-  chip = String(ESP.getChipModel());  // Assign to global variable
+  String chip = String(ESP.getChipModel());
   watch.setName(chip);
 #ifdef BOARD_NAME
   watch.setName(BOARD_NAME);
@@ -2051,27 +2032,7 @@ void hal_setup()
   watch.setRawDataCallback(rawDataCallback);
   watch.begin();
   watch.set24Hour(true);
-  
-  // Initialize I2C and battery gauge
-  Wire.begin(I2C_SDA, I2C_SCL);
-  
-#ifdef ENABLE_MAX17048_BATTERY
-  batteryGauge.begin();
-  float soc = batteryGauge.getSoC();
-  watch.setBattery((int)soc);
-  Serial.printf("MAX17048 - Initial Battery Level: %.2f%%\n", soc);
-#elif defined ENABLE_CW2015_BATTERY
-  batteryGauge.begin();
-  float capacity = batteryGauge.capacity();
-  watch.setBattery((int)capacity);
-  Serial.printf("CW2015 - Initial Battery Level: %.2f%%\n", capacity);
-#else
-  watch.setBattery(85);  // Default value if no battery gauge is enabled
-#endif
-
-  // Configure BUTTON_HOME as external wakeup source for light sleep
-  pinMode(BUTTON_HOME, INPUT_PULLUP);
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_HOME, 0); // Wake up on button press (low signal)
+  watch.setBattery(85);
 
   String about = String(ui_info_text) + "\n" + chip + "\n" + watch.getAddress();
   lv_label_set_text(ui_aboutText, about.c_str());
@@ -2278,21 +2239,6 @@ void hal_loop()
     {
       updateSeconds = false;
       ui_update_seconds(watch.getSecond());
-      
-      // Update battery level periodically (every minute)
-      static unsigned long lastBatteryUpdate = 0;
-      if (millis() - lastBatteryUpdate > 60000) { // Update every minute
-#ifdef ENABLE_MAX17048_BATTERY
-        float soc = batteryGauge.getSoC();
-        watch.setBattery((int)soc);
-        Serial.printf("MAX17048 - Updated Battery Level: %.2f%%\n", soc);
-#elif defined ENABLE_CW2015_BATTERY
-        float capacity = batteryGauge.capacity();
-        watch.setBattery((int)capacity);
-        Serial.printf("CW2015 - Updated Battery Level: %.2f%%\n", capacity);
-#endif
-        lastBatteryUpdate = millis();
-      }
     }
 
     if (ui_home == ui_clockScreen)
@@ -2389,8 +2335,8 @@ void hal_loop()
 
     if (actScr == ui_appInfoScreen)
     {
-      lv_label_set_text_fmt(ui_appBatteryText, "Battery - %d%%", watch.getBattery());
-      lv_bar_set_value(ui_appBatteryLevel, watch.getBattery(), LV_ANIM_OFF);
+      lv_label_set_text_fmt(ui_appBatteryText, "Battery - %d%%", watch.getPhoneBattery());
+      lv_bar_set_value(ui_appBatteryLevel, watch.getPhoneBattery(), LV_ANIM_OFF);
       if (watch.isPhoneCharging())
       {
         lv_image_set_src(ui_appBatteryIcon, &ui_img_battery_plugged_png);
@@ -2427,32 +2373,10 @@ void hal_loop()
       else if (screenTimer.time + screenTimer.duration < millis())
       {
         Timber.w("Screen timeout");
-        
-        // Only handle screen timeout if on the clock/home screen (not on other apps/interfaces)
-        lv_disp_t *display = lv_display_get_default();
-        lv_obj_t *actScr = lv_display_get_screen_active(display);
-        if (actScr == ui_home) {
-          screenTimer.active = false;
-          
-          screenBrightness(0);
-          
-          // Lower CPU frequency to save power before entering light sleep
-          esp_pm_config_esp32s3_t pm_config = {
-              .max_freq_mhz = 80,
-              .min_freq_mhz = 40,
-              .light_sleep_enable = true
-          };
-          esp_pm_configure(&pm_config);
-          
-          // Enter light sleep mode only on the home/clock screen
-          esp_light_sleep_start();
-          
-          // Restore normal CPU frequency after waking up
-          pm_config.max_freq_mhz = 160;
-          pm_config.min_freq_mhz = 80;
-          esp_pm_configure(&pm_config);
-        } 
-        // On other screens, do nothing - don't dim screen or go to sleep
+        screenTimer.active = false;
+
+        screenBrightness(0);
+        lv_screen_load(ui_home);
       }
     }
   }
@@ -2553,7 +2477,7 @@ void update_faces()
   int temp = watch.getWeatherAt(0).temp;
   int icon = watch.getWeatherAt(0).icon;
 
-  int battery = watch.getBattery();
+  int battery = watch.getPhoneBattery();
   bool connection = watch.isConnected();
 
   int steps = 2735;

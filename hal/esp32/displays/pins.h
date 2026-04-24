@@ -189,9 +189,8 @@
 #define RST 4
 
 #define BL 14
-
 #define VIBRATION_PIN 9
-
+#define BUTTON_HOME 0
 #define MAX_FILE_OPEN 20
 
 #elif ESPS3_2_06
