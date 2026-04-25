@@ -2447,8 +2447,20 @@ void hal_loop()
           // Enter light sleep mode only on the home/clock screen
           esp_light_sleep_start();
           
+          // Get battery level after waking up
+#ifdef ENABLE_MAX17048_BATTERY
+          float soc = batteryGauge.getSoC();
+          watch.setBattery((int)soc);
+#elif defined ENABLE_CW2015_BATTERY
+          float capacity = batteryGauge.capacity();
+          watch.setBattery((int)capacity);
+#endif
+          
+          // Refresh UI to display updated battery level
+          update_faces();
+          
           // Restore normal CPU frequency after waking up
-          pm_config.max_freq_mhz = 160;
+          pm_config.max_freq_mhz = 240;
           pm_config.min_freq_mhz = 80;
           esp_pm_configure(&pm_config);
         } 
