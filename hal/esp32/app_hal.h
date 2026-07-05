@@ -95,8 +95,8 @@
 #define ENABLE_APP_TIMER
 
 // 电池电量计支持选项
-#define ENABLE_MAX17048_BATTERY  // 启用MAX17048电池电量计
-// #define ENABLE_CW2015_BATTERY  // 启用CW2015电池电量计（与MAX17048二选一）
+// #define ENABLE_MAX17048_BATTERY  // 启用MAX17048电池电量计
+#define ENABLE_CW2015_BATTERY  // 启用CW2015电池电量计（与MAX17048二选一）
 
 #ifdef __cplusplus
 extern "C" {

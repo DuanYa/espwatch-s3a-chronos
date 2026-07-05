@@ -50,7 +50,6 @@
 #include "displays/pins.h"
 #include "splash.h"
 
-
 #include "driver/rtc_io.h"
 #include "esp_pm.h"
 
@@ -60,7 +59,7 @@
 #ifdef M5_STACK_DIAL
 #include "M5Dial.h"
 #define tft M5Dial.Display
-#elif defined(VIEWE_SMARTRING) || defined(VIEWE_KNOB_15) || defined(ESPS3_1_75)|| defined(ESPS3_2_06)
+#elif defined(VIEWE_SMARTRING) || defined(VIEWE_KNOB_15) || defined(ESPS3_1_75) || defined(ESPS3_2_06)
 #include "displays/viewe.hpp"
 #define SW_ROTATION
 #elif defined(ELECROW_S3)
@@ -136,7 +135,7 @@ ChronosTimer screenTimer;
 ChronosTimer alertTimer;
 ChronosTimer searchTimer;
 
-String chip;  // Global chip model string
+String chip; // Global chip model string
 Navigation nav;
 bool navChanged = false;
 bool navIcChanged = false;
@@ -200,11 +199,11 @@ bool isKnown(uint8_t id);
 void parseDial(const char *path, bool restart = false);
 bool lvImgHeader(uint8_t *byteArray, uint8_t cf, uint16_t w, uint16_t h, uint16_t stride);
 
-
 lv_display_rotation_t getRotation(uint8_t rotation)
 {
-    if (rotation > 3) return LV_DISPLAY_ROTATION_0;
-    return (lv_display_rotation_t)rotation;
+  if (rotation > 3)
+    return LV_DISPLAY_ROTATION_0;
+  return (lv_display_rotation_t)rotation;
 }
 
 /* Display flushing */
@@ -217,8 +216,9 @@ void my_disp_flush(lv_display_t *display, const lv_area_t *area, unsigned char *
 
 #ifdef SW_ROTATION
   lv_display_rotation_t rotation = lv_display_get_rotation(display);
-	lv_area_t rotated_area;
-  if(rotation != LV_DISPLAY_ROTATION_0) {
+  lv_area_t rotated_area;
+  if (rotation != LV_DISPLAY_ROTATION_0)
+  {
     lv_color_format_t cf = lv_display_get_color_format(display);
     /*Calculate the position of the rotated area*/
     rotated_area = *area;
@@ -1383,7 +1383,7 @@ void onCustomFaceSelected(int pathIndex)
   float capacity = batteryGauge.capacity();
   watch.setBattery((int)capacity);
 #endif
-  
+
   lv_screen_load_anim(ui_home, LV_SCR_LOAD_ANIM_FADE_ON, 500, 0, false);
 
   prefs.putString("custom", customFacePaths[pathIndex]);
@@ -1444,10 +1444,11 @@ void onRotateChange(lv_event_t *e)
   uint16_t sel = lv_dropdown_get_selected(obj);
   Timber.i("Selected index: %d", sel);
 
-if (SCREEN_WIDTH != SCREEN_HEIGHT && sel % 2 != 0) {
-  showError("Not supported", "90 & 270 rotation is not supported when screen width & height are not equal");
-  return;
-}
+  if (SCREEN_WIDTH != SCREEN_HEIGHT && sel % 2 != 0)
+  {
+    showError("Not supported", "90 & 270 rotation is not supported when screen width & height are not equal");
+    return;
+  }
 
   prefs.putInt("rotate", sel);
 #ifdef SW_ROTATION
@@ -1771,7 +1772,7 @@ void btn_home_handler(Button2 &btn)
     if (actScr != ui_home)
     {
       lv_screen_load_anim(ui_home, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0, false);
-      
+
       // Get battery level when entering home screen
 #ifdef ENABLE_MAX17048_BATTERY
       float soc = batteryGauge.getSoC();
@@ -1921,7 +1922,8 @@ void hal_setup()
     tft.setTextWrap(true, true);
     tft.println("Touch calibration required!\nPress center to start then \ntouch the corners as instructed.\nUse a pen or stylus.");
     uint16_t touchX, touchY;
-    while(!tft.getTouch(&touchX, &touchY)) {
+    while (!tft.getTouch(&touchX, &touchY))
+    {
       delay(100);
     }
 
@@ -1938,7 +1940,6 @@ void hal_setup()
 #endif
 
   loadSplash();
-
 
   alert_states = prefs.getInt("alert_states", alert_states);
 
@@ -1967,10 +1968,10 @@ void hal_setup()
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(100000);
   tp.setPins(TP_RST, TP_INT);
-  tp.begin(Wire, 0x38, I2C_SDA, I2C_SCL); 
-  tp.setSwapXY(false);  // 恢复不交换X和Y坐标
-  tp.setMirrorXY(false, false);  // 恢复不镜像
-  tp.setMaxCoordinates(240, 320);  // 触摸芯片原始坐标范围
+  tp.begin(Wire, 0x38, I2C_SDA, I2C_SCL);
+  tp.setSwapXY(false);            // 恢复不交换X和Y坐标
+  tp.setMirrorXY(false, false);   // 恢复不镜像
+  tp.setMaxCoordinates(240, 320); // 触摸芯片原始坐标范围
   Serial.println("Touch normal enabled");
 #endif
 
@@ -2035,10 +2036,10 @@ void hal_setup()
   watch.setScreen(CS_240x296_191_RTF);
 #elif defined(ESPS3_2_06)
   watch.setScreen(CS_410x494_200_RTF);
-#elif defined(VIEWE_SMARTRING) || defined(VIEWE_KNOB_15) ||  defined(ESPS3_1_75)
+#elif defined(VIEWE_SMARTRING) || defined(VIEWE_KNOB_15) || defined(ESPS3_1_75)
   watch.setScreen(CS_466x466_143_CTF);
 #endif
-  chip = String(ESP.getChipModel());  // Assign to global variable
+  chip = String(ESP.getChipModel()); // Assign to global variable
   watch.setName(chip);
 #ifdef BOARD_NAME
   watch.setName(BOARD_NAME);
@@ -2051,10 +2052,10 @@ void hal_setup()
   watch.setRawDataCallback(rawDataCallback);
   watch.begin();
   watch.set24Hour(true);
-  
+
   // Initialize I2C and battery gauge
   Wire.begin(I2C_SDA, I2C_SCL);
-  
+
 #ifdef ENABLE_MAX17048_BATTERY
   batteryGauge.begin();
   float soc = batteryGauge.getSoC();
@@ -2062,11 +2063,24 @@ void hal_setup()
   Serial.printf("MAX17048 - Initial Battery Level: %.2f%%\n", soc);
 #elif defined ENABLE_CW2015_BATTERY
   batteryGauge.begin();
+
+  if (!batteryGauge.isProfileLoaded()) {
+    Serial.println("CW2015 - Battery profile not loaded, loading default profile...");
+    static const uint8_t cw2015_profile[] = {
+      0x16, 0x0A, 0x2E, 0x34, 0x3C, 0x44, 0x4C, 0x54,
+      0x5C, 0x64, 0x6E, 0x7A, 0x88, 0x96, 0xA6, 0xB6
+    };
+    batteryGauge.loadProfile(cw2015_profile);
+  }
+
+  batteryGauge.quickStart();
+
+  float cw_voltage = batteryGauge.voltage();
   float capacity = batteryGauge.capacity();
   watch.setBattery((int)capacity);
-  Serial.printf("CW2015 - Initial Battery Level: %.2f%%\n", capacity);
+  Serial.printf("CW2015 - Voltage: %.3fV, Battery Level: %.2f%%\n", cw_voltage, capacity);
 #else
-  watch.setBattery(85);  // Default value if no battery gauge is enabled
+  watch.setBattery(85); // Default value if no battery gauge is enabled
 #endif
 
   // Configure BUTTON_HOME as external wakeup source for light sleep
@@ -2191,13 +2205,13 @@ void hal_setup()
 
 #if ESPS3_2_06
   if (!rtc.begin(Wire))
-	{
-		Timber.e("Failed to find PCF85063 - check your wiring!");
-	}
+  {
+    Timber.e("Failed to find PCF85063 - check your wiring!");
+  }
   RTC_DateTime dt = rtc.getDateTime();
-	watch.setTime(dt.getSecond(), dt.getMinute(), dt.getHour(), dt.getDay(), dt.getMonth(), dt.getYear());
-	rtc.resetAlarm();
-	rtc.disableAlarm();
+  watch.setTime(dt.getSecond(), dt.getMinute(), dt.getHour(), dt.getDay(), dt.getMonth(), dt.getYear());
+  rtc.resetAlarm();
+  rtc.disableAlarm();
 #endif
 
   ui_update_seconds(watch.getSecond());
@@ -2230,8 +2244,8 @@ void hal_setup()
   btn_home.begin(BUTTON_HOME);
 
   btn_home.setClickHandler(btn_home_handler);
-  //btn_home.setLongClickHandler(btn_home_handler);       // this will only be called upon release
-  btn_home.setLongClickDetectedHandler(btn_home_handler);  // this will only be called upon detection
+  // btn_home.setLongClickHandler(btn_home_handler);       // this will only be called upon release
+  btn_home.setLongClickDetectedHandler(btn_home_handler); // this will only be called upon detection
   btn_home.setDoubleClickHandler(btn_home_handler);
   btn_home.setTripleClickHandler(btn_home_handler);
   btn_home.setLongClickTime(1000); // set long click time to 1000ms
@@ -2254,7 +2268,7 @@ void hal_loop()
     watch.loop();
 
 #if defined(BUTTON_HOME) && (BUTTON_HOME != -1)
-  btn_home.loop();
+    btn_home.loop();
 #endif
 
 #if defined(M5_STACK_DIAL) || defined(VIEWE_KNOB_15) || defined(ELECROW_S3)
@@ -2278,10 +2292,11 @@ void hal_loop()
     {
       updateSeconds = false;
       ui_update_seconds(watch.getSecond());
-      
+
       // Update battery level periodically (every minute)
       static unsigned long lastBatteryUpdate = 0;
-      if (millis() - lastBatteryUpdate > 60000) { // Update every minute
+      if (millis() - lastBatteryUpdate > 60000)
+      { // Update every minute
 #ifdef ENABLE_MAX17048_BATTERY
         float soc = batteryGauge.getSoC();
         watch.setBattery((int)soc);
@@ -2289,7 +2304,7 @@ void hal_loop()
 #elif defined ENABLE_CW2015_BATTERY
         float capacity = batteryGauge.capacity();
         watch.setBattery((int)capacity);
-        Serial.printf("CW2015 - Updated Battery Level: %.2f%%\n", capacity);
+        Serial.printf("CW2015 - Voltage: %.3fV, Battery Level: %.2f%%\n", batteryGauge.voltage(), capacity);
 #endif
         lastBatteryUpdate = millis();
       }
@@ -2427,26 +2442,26 @@ void hal_loop()
       else if (screenTimer.time + screenTimer.duration < millis())
       {
         Timber.w("Screen timeout");
-        
+
         // Only handle screen timeout if on the clock/home screen (not on other apps/interfaces)
         lv_disp_t *display = lv_display_get_default();
         lv_obj_t *actScr = lv_display_get_screen_active(display);
-        if (actScr == ui_home) {
+        if (actScr == ui_home)
+        {
           screenTimer.active = false;
-          
+
           screenBrightness(0);
-          
+
           // Lower CPU frequency to save power before entering light sleep
           esp_pm_config_esp32s3_t pm_config = {
               .max_freq_mhz = 80,
-              .min_freq_mhz = 40,
-              .light_sleep_enable = true
-          };
+              .min_freq_mhz = 10,
+              .light_sleep_enable = true};
           esp_pm_configure(&pm_config);
-          
+
           // Enter light sleep mode only on the home/clock screen
           esp_light_sleep_start();
-          
+
           // Get battery level after waking up
 #ifdef ENABLE_MAX17048_BATTERY
           float soc = batteryGauge.getSoC();
@@ -2456,14 +2471,25 @@ void hal_loop()
           watch.setBattery((int)capacity);
 #endif
           
-          // Refresh UI to display updated battery level
+          // Wait a short time for Bluetooth to reconnect
+          delay(500);
+          
+          // Turn on backlight
+          uint8_t lvl = lv_slider_get_value(ui_brightnessSlider);
+          screenBrightness(lvl);
+          
+          // Refresh UI to display updated battery level and Bluetooth status
           update_faces();
           
           // Restore normal CPU frequency after waking up
           pm_config.max_freq_mhz = 240;
           pm_config.min_freq_mhz = 80;
           esp_pm_configure(&pm_config);
-        } 
+          
+          // Reactivate screen timer after waking up
+          screenTimer.active = true;
+          screenTimer.time = millis();
+        }
         // On other screens, do nothing - don't dim screen or go to sleep
       }
     }
