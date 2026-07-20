@@ -1,13 +1,25 @@
-# ESP32-S3-Touch-LCD-1.69 (ESPS3_1_69) 外设引脚接线详细说明
+# ESP32-S3-Touch-LCD-1.69 (ESPS3_1_69) 外设引脚接线与使用详细说明
 
-本文档详细分析并整理了当前项目中默认编译环境（`lolin_s3_mini_1_69` / `ESPS3_1_69`）下的 ESP32-S3 芯片与各项板载及外接外设的引脚连接关系。
+本文档详细分析并整理了当前项目中默认编译环境（`lolin_s3_mini_1_69` / `ESPS3_1_69`）下的 ESP32-S3 芯片与各项板载、外接外设的引脚连接关系、硬件参数（如屏幕分辨率、通信总线参数等）以及关键外设的使用方法。
 
-所有引脚映射均与代码中的定义（如 `hal/esp32/displays/pins.h` 和 `hal/esp32/app_hal.cpp`）保持完全一致。
+所有引脚映射与参数均与代码中的定义（如 `hal/esp32/displays/pins.h` 和 `hal/esp32/app_hal.cpp`）保持完全一致。
 
 ---
 
-## 1. 屏幕 (SPI 接口)
-屏幕使用 **ST7789V2** 驱动芯片，通过 **SPI3_HOST**（SPI3 接口）进行通信。
+## 1. 屏幕 (通信与参数)
+
+### 1.1 屏幕硬件参数
+- **驱动芯片**：ST7789V2
+- **屏幕分辨率**：**240 × 280** 像素 (矩形屏)
+- **屏幕偏移配置** (对应 `pins.h` 宏)：
+  - `OFFSET_X` = 0
+  - `OFFSET_Y` = 20
+- **像素颜色格式**：RGB565，RGB顺序为 `false` (BGR模式)
+
+### 1.2 通信使用方式
+屏幕驱动通过 **SPI3_HOST (SPI3)** 串行总线进行数据的高速通信。为了保证界面的极致流畅，固件配合 **LovyanGFX** 硬件驱动库和 **LVGL 9** 的双缓存机制，启用了 **DMA (Direct Memory Access)** 模式，时钟频率设定为 **40MHz (写)** 及 **20MHz (读)**。
+
+#### SPI 物理引脚接线：
 
 | 外设/功能 | ESP32-S3 引脚 | 代码宏定义 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -17,12 +29,12 @@
 | **DC** | GPIO 6 | `DC` | 数据 / 命令选择控制引脚 |
 | **CS** | GPIO 8 | `CS` | 片选控制引脚 |
 | **RST** | GPIO 4 | `RST` | 复位引脚 |
-| **BL (背光)** | GPIO 14 | `BL` | LCD 背光控制（支持 PWM 亮度调节） |
+| **BL (背光)** | GPIO 14 | `BL` | LCD 背光控制（使用 PWM 驱动支持多级亮度调节） |
 
 ---
 
 ## 2. 触摸屏 (I2C 接口)
-触摸屏使用 **FT6X36** 控制芯片，I2C 7位地址为 `0x38`。
+触摸屏使用 **FT6X36** 电容式触摸控制器，I2C 7位物理地址为 `0x38`。
 
 | 外设/功能 | ESP32-S3 引脚 | 代码宏定义 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -45,13 +57,105 @@
 ---
 
 ## 4. 心率血氧传感器 (I2C 接口)
-支持外接或板载 **MAX30105** / **MAX30102** 光学传感器，其 I2C 地址为 `0x57`。
-该传感器连接至系统的共享 I2C 总线。
+
+### 4.1 硬件连接
+系统支持通过共享的 I2C 硬件总线连接 **MAX30105** / **MAX30102** 光学心率与血氧饱和度传感器，其 I2C 地址为 `0x57`。
 
 | 外设/功能 | ESP32-S3 引脚 | 代码对应 | 说明 |
 | :--- | :--- | :--- | :--- |
 | **I2C_SDA** | GPIO 1 | `I2C_SDA` | 共享 I2C 数据线 |
 | **I2C_SCL** | GPIO 2 | `I2C_SCL` | 共享 I2C 时钟线 |
+
+### 4.2 传感器使用方法 (C++ 代码示例)
+项目中集成了专用的心率和血氧计算驱动库（位于 `hal/esp32/drivers/` 目录下）。
+
+#### 1) 初始化传感器
+```cpp
+#include <Wire.h>
+#include "drivers/MAX30105.h"
+
+MAX30105 particleSensor;
+
+void initHeartRateSensor() {
+    // 1. 初始化共享的 I2C 接口
+    Wire.begin(1, 2);
+    Wire.setClock(400000); // 启用 400kHz I2C 快速模式
+
+    // 2. 检查传感器并初始化
+    if (!particleSensor.begin(Wire, 400000)) {
+        Serial.println("未找到 MAX30105/102 传感器，请检查接线和供电！");
+        return;
+    }
+
+    // 3. 配置传感器参数用于检测心率与血氧
+    // 默认配置：LED功率=0x1F, 样本平均=4, LED模式=3(多LED全开), 采样率=400, 脉宽=411, ADC量程=4096
+    particleSensor.setup();
+}
+```
+
+#### 2) 心率检测 (Beat Detection)
+利用 `drivers/heartRate.h` 提供的 Maxim 经典 PBA 算法检测实时心率：
+```cpp
+#include "drivers/heartRate.h"
+
+long lastBeat = 0;
+float beatsPerMinute;
+
+void updateHeartRate() {
+    // 读取红外(IR)通道值 (红外光对血液脉动最敏感)
+    uint32_t irValue = particleSensor.getIR();
+
+    // 运行滤波并检测脉搏波峰
+    if (checkForBeat(irValue) == true) {
+        long delta = millis() - lastBeat;
+        lastBeat = millis();
+
+        beatsPerMinute = 60 / (delta / 1000.0);
+
+        if (beatsPerMinute < 255 && beatsPerMinute > 20) {
+            Serial.printf("检测到心跳！实时 BPM: %.1f\n", beatsPerMinute);
+        }
+    }
+}
+```
+
+#### 3) 血氧饱和度 (SpO2) 测量
+利用 `drivers/spo2_algorithm.h` 提供的双波长比值计算血氧（利用红光与红外光的消光比差异）：
+```cpp
+#include "drivers/spo2_algorithm.h"
+
+uint32_t irBuffer[BUFFER_SIZE];   // IR 传感器数据缓存 (25Hz采样频率)
+uint32_t redBuffer[BUFFER_SIZE];  // 红光传感器数据缓存
+
+int32_t spo2;                     // 计算出的血氧饱和度百分比 (0-100)
+int8_t isValidSpO2;               // 血氧是否有效标志 (1为有效，0为无效)
+int32_t heartRate;                // 算法计算出的平均心率
+int8_t isValidHR;                 // 心率是否有效标志
+
+void measureSpO2() {
+    // 1. 采集 BUFFER_SIZE (通常为 100) 个数据样本
+    for (byte i = 0 ; i < BUFFER_SIZE ; i++) {
+        while (particleSensor.available() == false) {
+            particleSensor.check(); // 查询传感器是否有新数据
+        }
+
+        redBuffer[i] = particleSensor.getFIFORed(); // 读取红光值
+        irBuffer[i] = particleSensor.getFIFOIR();   // 读取红外光值
+        particleSensor.nextSample();                 // 移至下一样本
+    }
+
+    // 2. 调用算法进行计算
+    maxim_heart_rate_and_oxygen_saturation(irBuffer, BUFFER_SIZE, redBuffer,
+                                           &spo2, &isValidSpO2,
+                                           &heartRate, &isValidHR);
+
+    if (isValidSpO2) {
+        Serial.printf("计算成功！血氧饱和度 (SpO2): %d%%\n", spo2);
+    } else {
+        Serial.println("血氧数据无效，请保持手指静止。");
+    }
+}
+```
 
 ---
 
